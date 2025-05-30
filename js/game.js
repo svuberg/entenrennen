@@ -1252,7 +1252,7 @@ function saveRun() {
   formData.append('score', Math.floor(meters));
   formData.append('device', deviceId);
 
-  fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
+  fetch('https://script.google.com/macros/s/AKfycbxdCZmpjFvyXJa_khKLKPjSYvnzpM3DA-qPGk9l6r-cW6DZiQHR9nwwMMPz6KCW-NPYcw/exec', {
     method: 'POST',
     body: formData
   }).then(() => {

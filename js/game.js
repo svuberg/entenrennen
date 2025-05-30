@@ -15,6 +15,9 @@ let currentStartButtonColor = "#B22222"; // Rot (Feuerrot)
 let currentGameOverButtonColor = "#228B22"; // Grün
 
 function startGame() {
+  removeBugReportButton(); // <-- Button immer entfernen, wenn Spiel startet
+  gameRunning = true;
+  gameState = 'playing';
   gameRunning = true;
   gameState = 'playing';
   meters = 0;

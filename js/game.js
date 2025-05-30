@@ -1463,7 +1463,43 @@ function submitHighscore(name) {
   formData.append('name', name);
   formData.append('type', 'highscore'); // <--- NEU
 
-  // ...rest wie gehabt...
+ let overlay = document.getElementById('highscoreOverlay');
+  let feedbackDiv = document.getElementById('highscoreFeedback');
+  if (!feedbackDiv && overlay) {
+    feedbackDiv = document.createElement('div');
+    feedbackDiv.id = 'highscoreFeedback';
+    feedbackDiv.style.color = '#fff';
+    feedbackDiv.style.marginTop = '12px';
+    feedbackDiv.style.textAlign = 'center';
+    overlay.querySelector('div').appendChild(feedbackDiv);
+  }
+  if (feedbackDiv) feedbackDiv.textContent = "Sende...";
+
+  fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    body: formData
+  })
+    .then((response) => response.text())
+    .then((text) => {
+      let msg = "";
+      if (text === "OK") msg = "Dein Score wurde übermittelt!";
+      else if (text === "UPDATED") msg = "Dein Eintrag wurde aktualisiert!";
+      else if (text === "DUPLICATE") msg = "Dieser Score wurde bereits übermittelt.";
+      else if (text === "BADWORD") msg = "Bitte gib einen angemessenen Namen ein!";
+      else msg = "Unbekannte Antwort vom Server.";
+
+      if (feedbackDiv) feedbackDiv.textContent = msg;
+      setTimeout(() => {
+        if (overlay && document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+        showHighscoreInput = false;
+        drawGameOverScreen();
+      }, 2000);
+    })
+    .catch((err) => {
+      if (feedbackDiv) feedbackDiv.textContent = "Übermittlung fehlgeschlagen. Bitte später erneut versuchen!";
+    });
 }
 
 // --- NEU: Leaderboard laden ---

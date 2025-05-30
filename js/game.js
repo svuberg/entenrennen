@@ -515,6 +515,15 @@ function drawObstacles(deltaTime) {
   }
 }
 
+
+// --- Sounds laden ---
+const frogSound = new Audio('assets/sounds/frog.mp3');
+const getHitSound = new Audio('assets/sounds/gethit.mp3');
+const startSound = new Audio('assets/sounds/start.mp3');
+const bgMusic = new Audio('assets/sounds/musicloop.mp3');
+bgMusic.loop = true;
+bgMusic.volume = 0.18; // Leise (Skala: 0.0 - 1.0)
+
 function drawEnemies(deltaTime) {
   for (let i = enemies.length - 1; i >= 0; i--) {
     const frog = enemies[i];
@@ -523,7 +532,7 @@ function drawEnemies(deltaTime) {
     if (frog.state === 'idle') {
       frog.x -= speed * deltaTime;
       // Prüfe Abstand zur Ente
-      if (!frog.hasJumped && frog.x - player.x < player.width * 4) { // Springt früher!
+      if (!frog.hasJumped && frog.x - player.x < player.width * 4) {
         frog.showWarning = true;
         frog.warningTimer = 0;
         frog.hasJumped = true;
@@ -535,6 +544,9 @@ function drawEnemies(deltaTime) {
           frog.state = 'jump';
           frog.jumpTimer = 0;
           frog.showWarning = false;
+          // --- Frosch-Sound ---
+          frogSound.currentTime = 0;
+          frogSound.play();
         }
       }
     }
@@ -637,6 +649,11 @@ function drawMeters() {
 function gameOver() {
   if (!gameRunning) return;
   gameRunning = false;
+  // --- Kollisionssound ---
+  getHitSound.currentTime = 0;
+  getHitSound.play();
+  // --- Musik pausieren ---
+  bgMusic.pause();
   saveHighScore();
   gameState = 'collisionAnim';
   collisionAnimActive = true;
@@ -809,10 +826,13 @@ function handleCanvasClick(e) {
     const btnY = canvas.height * 0.35 - btnHeight / 2; // <-- Korrigiert!
 
     if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= btnY && clickY <= btnY + btnHeight) {
-      currentStartButtonColor = "#8B0000"; // dunkleres Rot beim Klick
+      currentStartButtonColor = "#8B0000";
       drawStartScreen();
+      // --- Startsound ---
+      startSound.currentTime = 0;
+      startSound.play();
       setTimeout(() => {
-        currentStartButtonColor = "#B22222"; // Rot zurücksetzen
+        currentStartButtonColor = "#B22222";
         startGame();
       }, 100);
     }
@@ -835,10 +855,13 @@ function handleCanvasClick(e) {
     const btnY = boxY + boxHeight + infoFontSize * 0.8;
 
     if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= btnY && clickY <= btnY + btnHeight) {
-      currentGameOverButtonColor = "#8B0000"; // dunkleres Rot beim Klick
+      currentGameOverButtonColor = "#8B0000";
       drawGameOverScreen();
+      // --- Startsound ---
+      startSound.currentTime = 0;
+      startSound.play();
       setTimeout(() => {
-        currentGameOverButtonColor = "#B22222"; // Rot zurücksetzen
+        currentGameOverButtonColor = "#B22222";
         startGame();
       }, 100);
     }
@@ -1050,6 +1073,12 @@ function drawGameOverScreen() {
 }
 
 function startGame() {
+  // --- Startsound ---
+  startSound.currentTime = 0;
+  startSound.play();
+  // --- Hintergrundmusik ---
+  bgMusic.currentTime = 0;
+  bgMusic.play();
   gameRunning = true;
   gameState = 'playing';
   obstacles = [];

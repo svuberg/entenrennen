@@ -15,9 +15,7 @@ let currentStartButtonColor = "#B22222"; // Rot (Feuerrot)
 let currentGameOverButtonColor = "#228B22"; // Grün
 
 function startGame() {
-  removeBugReportButton(); // <-- Button immer entfernen, wenn Spiel startet
-  gameRunning = true;
-  gameState = 'playing';
+  removeBugReportButton();
   gameRunning = true;
   gameState = 'playing';
   meters = 0;
@@ -30,6 +28,7 @@ function startGame() {
   player.y = currentLandHeight + (canvas.height - 2 * currentLandHeight) / 2 - player.height / 2;
   bgMusic.currentTime = 0;
   bgMusic.play();
+  runSaved = false; // <--- Flag zurücksetzen beim Neustart!
   requestAnimationFrame(gameLoop);
 }
 
@@ -1349,12 +1348,16 @@ function getOrCreateDeviceId() {
 }
 const deviceId = getOrCreateDeviceId();
 
+let runSaved = false; // <--- NEU: Flag für Run-Übertragung
+
 function saveRun() {
+  if (runSaved) return; // <--- NEU: Doppelte Übertragung verhindern
+  runSaved = true;      // <--- NEU: Flag setzen
   const formData = new FormData();
   formData.append('score', Math.floor(meters));
   formData.append('device', deviceId);
   formData.append('date', new Date().toISOString());
-  formData.append('type', 'run'); // <--- NEU
+  formData.append('type', 'run');
 
   fetch(GOOGLE_SCRIPT_URL, {
     method: 'POST',

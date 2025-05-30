@@ -279,7 +279,7 @@ loadHighScore(); // Lade den Highscore direkt beim Laden des Skripts
 
 
 // --- Google Apps Script URL als Variable ---
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzVlmUOOmoNMyIpudEltI5XUlLnCPYGLtHiocnIwQee94KNK5rH5kXXaGDGAlINmB04YA/exec";
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxI9VmMSKypB-QDfyCvfdwA7lJ22YEOIMsaf6VmcFmBIOq1NOGZh8z5waXwCEYYO2w7WQ/exec";
 
 function saveHighScore() {
   if (meters > highScore) {
@@ -1329,9 +1329,16 @@ function submitHighscore(name) {
     method: 'POST',
     body: formData
   })
-    .then((response) => {
-      if (!response.ok) throw new Error("Serverfehler");
-      if (feedbackDiv) feedbackDiv.textContent = "Highscore erfolgreich übermittelt!";
+    .then((response) => response.text())
+    .then((text) => {
+      let msg = "";
+      if (text === "OK") msg = "Dein Score wurde übermittelt!";
+      else if (text === "UPDATED") msg = "Dein Eintrag wurde aktualisiert!";
+      else if (text === "DUPLICATE") msg = "Dieser Score wurde bereits übermittelt.";
+      else if (text === "BADWORD") msg = "Bitte gib einen angemessenen Namen ein!";
+      else msg = "Unbekannte Antwort vom Server.";
+
+      if (feedbackDiv) feedbackDiv.textContent = msg;
       setTimeout(() => {
         if (overlay) document.body.removeChild(overlay);
         showHighscoreInput = false;

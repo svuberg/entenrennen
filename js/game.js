@@ -1233,6 +1233,135 @@ function handleCanvasClick(e) {
   }
 }
 
+// --- BUGREPORT OVERLAY & BUTTON ---
+function drawBugReportButton() {
+  // Button nur im Game Over Screen anzeigen
+  if (gameState !== 'gameOver') return;
+  let btn = document.getElementById('bugReportBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'bugReportBtn';
+    btn.textContent = "🐞 Fehler melden";
+    btn.style.position = 'fixed';
+    btn.style.left = '18px';
+    btn.style.bottom = '18px';
+    btn.style.zIndex = 1200;
+    btn.style.background = '#B22222';
+    btn.style.color = '#fff';
+    btn.style.border = 'none';
+    btn.style.borderRadius = '10px';
+    btn.style.padding = '10px 18px';
+    btn.style.fontSize = '1em';
+    btn.style.boxShadow = '0 2px 8px #0005';
+    btn.onclick = drawBugReportOverlay;
+    document.body.appendChild(btn);
+  }
+}
+function removeBugReportButton() {
+  const btn = document.getElementById('bugReportBtn');
+  if (btn) document.body.removeChild(btn);
+}
+
+function drawBugReportOverlay() {
+  let overlay = document.getElementById('bugReportOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'bugReportOverlay';
+    overlay.style.position = 'fixed';
+    overlay.style.left = 0;
+    overlay.style.top = 0;
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = 'rgba(0,0,0,0.6)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = 2000;
+    overlay.innerHTML = `
+      <div style="background:rgba(0,0,0,0.85);padding:28px 18px;border-radius:14px;box-shadow:0 2px 16px #0008;max-width:90vw;">
+        <h2 style="margin-top:0;color:#fff;">Fehler melden</h2>
+        <input id="bugNameInput" type="text" maxlength="30" placeholder="Dein Name (optional)" style="font-size:1em;padding:6px;width:90%;margin-bottom:8px;border-radius:8px;border:none;">
+        <br>
+        <textarea id="bugDescInput" rows="4" maxlength="500" placeholder="Was ist passiert?" style="font-size:1.1em;padding:8px;width:90%;margin-bottom:12px;border-radius:8px;border:none;"></textarea>
+        <br>
+        <button id="submitBugBtn" style="font-size:1.1em;padding:8px 24px;margin-top:8px;">E-Mail senden</button>
+        <button id="cancelBugBtn" style="font-size:1.1em;padding:8px 24px;margin-left:12px;margin-top:8px;">Abbrechen</button>
+        <div id="bugReportFeedback" style="color:#fff;margin-top:10px;text-align:center;"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById('submitBugBtn').onclick = () => {
+      const name = document.getElementById('bugNameInput').value.trim();
+      const desc = document.getElementById('bugDescInput').value.trim();
+      if (desc.length === 0) return;
+      sendBugReportMail(name, desc);
+    };
+    document.getElementById('cancelBugBtn').onclick = () => {
+      document.body.removeChild(overlay);
+    };
+  }
+}
+
+function sendBugReportMail(name, desc) {
+  const subject = encodeURIComponent("Entenrennen Bugreport");
+  const body = encodeURIComponent(
+    `Name: ${name}\nGeräte-ID: ${deviceId}\nDatum: ${new Date().toLocaleString()}\n\nBeschreibung:\n${desc}`
+  );
+  window.location.href = `mailto:svuberg@gmail.com?subject=${subject}&body=${body}`;
+  setTimeout(() => {
+    const overlay = document.getElementById('bugReportOverlay');
+    if (overlay) document.body.removeChild(overlay);
+  }, 500);
+}
+
+// Button nur im Game Over Screen anzeigen/entfernen
+const origDrawGameOverScreen = drawGameOverScreen;
+drawGameOverScreen = function() {
+  origDrawGameOverScreen();
+  drawBugReportButton();
+};
+function hideAllOverlays() {
+  removeBugReportButton();
+  const overlay = document.getElementById('bugReportOverlay');
+  if (overlay) document.body.removeChild(overlay);
+}
+window.addEventListener('gameStateChange', () => {
+  if (gameState !== 'gameOver') removeBugReportButton();
+});
+
+// Entferne Button bei Neustart oder Overlay
+window.addEventListener('keydown', (e) => {
+  if (e.code === "Enter" && gameState !== 'gameOver') removeBugReportButton();
+});
+
+// --- Geräte-ID generieren und speichern ---
+function getOrCreateDeviceId() {
+  let deviceId = localStorage.getItem('entenrennen_device_id');
+  if (!deviceId) {
+    deviceId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 16));
+    localStorage.setItem('entenrennen_device_id', deviceId);
+  }
+  return deviceId;
+}
+const deviceId = getOrCreateDeviceId();
+
+function saveRun() {
+  const formData = new FormData();
+  formData.append('score', Math.floor(meters));
+  formData.append('device', deviceId);
+  formData.append('date', new Date().toISOString()); // <-- Datum mitsenden
+
+  fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    body: formData
+  }).then(() => {
+    console.log("Run an Google Sheet gesendet!");
+  }).catch((err) => {
+    console.error("Fehler beim Senden an Google Sheet:", err);
+  });
+}
+
 // --- NEU: Highscore-Name-Eingabe Overlay (schwarz-transparent) ---
 function drawHighscoreInput() {
   let overlay = document.getElementById('highscoreOverlay');
@@ -1492,30 +1621,3 @@ loadingLoop();
 window.addEventListener('beforeunload', () => {
   saveHighScore();
 });
-
-// --- Geräte-ID generieren und speichern ---
-function getOrCreateDeviceId() {
-  let deviceId = localStorage.getItem('entenrennen_device_id');
-  if (!deviceId) {
-    deviceId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 16));
-    localStorage.setItem('entenrennen_device_id', deviceId);
-  }
-  return deviceId;
-}
-const deviceId = getOrCreateDeviceId();
-
-function saveRun() {
-  const formData = new FormData();
-  formData.append('score', Math.floor(meters));
-  formData.append('device', deviceId);
-  formData.append('date', new Date().toISOString()); // <-- Datum mitsenden
-
-  fetch(GOOGLE_SCRIPT_URL, {
-    method: 'POST',
-    body: formData
-  }).then(() => {
-    console.log("Run an Google Sheet gesendet!");
-  }).catch((err) => {
-    console.error("Fehler beim Senden an Google Sheet:", err);
-  });
-}

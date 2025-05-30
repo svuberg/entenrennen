@@ -663,6 +663,7 @@ function drawMeters() {
 // --- Spielbildschirme und Logik ---
 function gameOver() {
   if (!gameRunning) return;
+  saveRun(); // <-- Jeder Lauf wird gespeichert!
   gameRunning = false;
   // --- Kollisionssound ---
   getHitSound.currentTime = 0;
@@ -1245,3 +1246,18 @@ function getOrCreateDeviceId() {
   return deviceId;
 }
 const deviceId = getOrCreateDeviceId();
+
+function saveRun() {
+  const formData = new FormData();
+  formData.append('score', Math.floor(meters));
+  formData.append('device', deviceId);
+
+  fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
+    method: 'POST',
+    body: formData
+  }).then(() => {
+    console.log("Run an Google Sheet gesendet!");
+  }).catch((err) => {
+    console.error("Fehler beim Senden an Google Sheet:", err);
+  });
+}

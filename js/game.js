@@ -279,7 +279,7 @@ loadHighScore(); // Lade den Highscore direkt beim Laden des Skripts
 
 
 // --- Google Apps Script URL als Variable ---
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyA2Msoygnhm2t_1bBTUsDWgrxKQeDCaJBut5vD7AnCtjER3tlWTic5nUN6vrM0sZ4q7g/exec";
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzVlmUOOmoNMyIpudEltI5XUlLnCPYGLtHiocnIwQee94KNK5rH5kXXaGDGAlINmB04YA/exec";
 
 function saveHighScore() {
   if (meters > highScore) {
@@ -884,7 +884,8 @@ function handleCanvasClick(e) {
     const distText = `Du bist ${Math.floor(meters)} Meter geschwommen.`;
     const hsText = `Highscore: ${highScore} m`;
     const boxWidth = Math.max(ctx.measureText(distText).width, ctx.measureText(hsText).width) + padding * 2;
-    const boxHeight = lineHeight + padding;
+    // KORREKTUR: Boxhöhe wie in drawGameOverScreen!
+    const boxHeight = lineHeight * 2 + padding * 1.2;
     const boxY = canvas.height * 0.24 + gameOverFontSize * 0.7;
 
     const btnWidth = Math.min(canvas.width * 0.5, 250);
@@ -1175,7 +1176,8 @@ function handleCanvasClick(e) {
     const distText = `Du bist ${Math.floor(meters)} Meter geschwommen.`;
     const hsText = `Highscore: ${highScore} m`;
     const boxWidth = Math.max(ctx.measureText(distText).width, ctx.measureText(hsText).width) + padding * 2;
-    const boxHeight = lineHeight + padding;
+    // KORREKTUR: Boxhöhe wie in drawGameOverScreen!
+    const boxHeight = lineHeight * 2 + padding * 1.2;
     const boxY = canvas.height * 0.24 + gameOverFontSize * 0.7;
 
     const btnWidth = Math.min(canvas.width * 0.5, 250);

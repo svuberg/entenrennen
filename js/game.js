@@ -14,6 +14,22 @@ let jumpStrength = -8; // Proportionaler Wert, wird mit deltaTime multipliziert
 let currentStartButtonColor = "#B22222"; // Rot (Feuerrot)
 let currentGameOverButtonColor = "#228B22"; // Grün
 
+function startGame() {
+  gameRunning = true;
+  gameState = 'playing';
+  meters = 0;
+  speed = INITIAL_SPEED;
+  velocityY = 0;
+  obstacles = [];
+  enemies = [];
+  timeSinceLastObstacle = 0;
+  timeSinceLastSpeedIncrease = 0;
+  player.y = currentLandHeight + (canvas.height - 2 * currentLandHeight) / 2 - player.height / 2;
+  bgMusic.currentTime = 0;
+  bgMusic.play();
+  requestAnimationFrame(gameLoop);
+}
+
 // NEU: Zeitmessung für Delta Time
 let lastFrameTime = 0; // Speichert den Zeitpunkt des letzten Frames
 
@@ -262,17 +278,19 @@ function loadHighScore() {
 loadHighScore(); // Lade den Highscore direkt beim Laden des Skripts
 
 
+// --- Google Apps Script URL als Variable ---
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyA2Msoygnhm2t_1bBTUsDWgrxKQeDCaJBut5vD7AnCtjER3tlWTic5nUN6vrM0sZ4q7g/exec";
+
 function saveHighScore() {
   if (meters > highScore) {
     highScore = Math.floor(meters);
     localStorage.setItem(HIGHSCORE_KEY, highScore);
 
-    // Highscore an Google Sheet senden (FormData, kein Header!)
     const formData = new FormData();
     formData.append('score', highScore);
     formData.append('device', deviceId);
 
-    fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
+    fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       body: formData
     }).then(() => {
@@ -680,6 +698,11 @@ function gameOver() {
   collisionAnimStartX = player.x;
   collisionAnimStartY = player.y;
 
+  // Vibrations-Feedback bei Kollision (wenn unterstützt)
+  if (navigator.vibrate) {
+    navigator.vibrate(200);
+  }
+
   // Event-Hinweis anzeigen und nach 5 Sekunden ausblenden
   showEventHint = true;
   if (eventHintTimeout) clearTimeout(eventHintTimeout);
@@ -853,7 +876,7 @@ function handleCanvasClick(e) {
       }, 100);
     }
   } else if (gameState === 'gameOver') {
-    // Diese Werte müssen exakt wie in drawGameOverScreen berechnet werden:
+    // Werte wie in drawGameOverScreen berechnen:
     const gameOverFontSize = Math.max(28, canvas.width * 0.032);
     const infoFontSize = Math.max(20, canvas.width * 0.028);
     const padding = infoFontSize * 0.7;
@@ -861,19 +884,35 @@ function handleCanvasClick(e) {
     const distText = `Du bist ${Math.floor(meters)} Meter geschwommen.`;
     const hsText = `Highscore: ${highScore} m`;
     const boxWidth = Math.max(ctx.measureText(distText).width, ctx.measureText(hsText).width) + padding * 2;
-    const boxHeight = lineHeight + padding * 1.2;
-    const gameOverY = canvas.height * 0.24;
-    const boxY = gameOverY + gameOverFontSize * 0.7;
+    const boxHeight = lineHeight + padding;
+    const boxY = canvas.height * 0.24 + gameOverFontSize * 0.7;
 
     const btnWidth = Math.min(canvas.width * 0.5, 250);
-    const btnHeight = Math.min(canvas.height * 0.12, 70);
+    const btnHeight = Math.min(canvas.height * 0.10, 55);
     const btnX = (canvas.width - btnWidth) / 2;
     const btnY = boxY + boxHeight + infoFontSize * 0.8;
 
+    // Highscore übermitteln Button
     if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= btnY && clickY <= btnY + btnHeight) {
+      showHighscoreInput = true;
+      drawHighscoreInput();
+      return;
+    }
+
+    // Leaderboard Button
+    const lbBtnY = btnY + btnHeight + 12;
+    if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= lbBtnY && clickY <= lbBtnY + btnHeight) {
+      showLeaderboard = true;
+      fetchLeaderboard();
+      drawLeaderboard();
+      return;
+    }
+
+    // Nochmal spielen Button
+    const playAgainBtnY = lbBtnY + btnHeight + 12;
+    if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= playAgainBtnY && clickY <= playAgainBtnY + btnHeight) {
       currentGameOverButtonColor = "#8B0000";
       drawGameOverScreen();
-      // --- Startsound ---
       startSound.currentTime = 0;
       startSound.play();
       setTimeout(() => {
@@ -1056,24 +1095,41 @@ function drawGameOverScreen() {
     ctx.textAlign = "center";
     ctx.fillText(eventText1, canvas.width / 2, eventBoxY + eventPadding + eventFontSize * 0.85);
     ctx.fillStyle = "#ff2222";
-    // Abstand zwischen den Texten vergrößert (z.B. *2.5 statt *2.0)
     ctx.fillText(eventText2, canvas.width / 2, eventBoxY + eventPadding + eventFontSize * 2.5);
   }
 
-  // --- "Nochmal spielen" Button erst nach 5 Sekunden anzeigen ---
+  // --- PATCH: Buttons für Highscore & Leaderboard ---
   if (!showEventHint) {
     const btnWidth = Math.min(canvas.width * 0.5, 250);
-    const btnHeight = Math.min(canvas.height * 0.12, 70);
+    const btnHeight = Math.min(canvas.height * 0.10, 55);
     const btnX = (canvas.width - btnWidth) / 2;
-    const btnY = boxY + boxHeight + infoFontSize * 0.8 + (showEventHint ? eventFontSize * 2.5 : 0);
+    const btnY = boxY + boxHeight + infoFontSize * 0.8;
 
-    ctx.fillStyle = currentGameOverButtonColor = "#B22222";
+    // Highscore übermitteln Button
+    ctx.fillStyle = "#1E90FF";
     roundRect(ctx, btnX, btnY, btnWidth, btnHeight, 15, true, false);
-
-    const playAgainFontSize = Math.max(18, canvas.width * 0.025);
     ctx.fillStyle = "white";
-    ctx.font = `bold ${playAgainFontSize}px sans-serif`;
-    ctx.fillText("Nochmal spielen", canvas.width / 2, btnY + btnHeight * 0.65);
+    ctx.font = `bold ${Math.max(18, canvas.width * 0.025)}px sans-serif`;
+    ctx.fillText("Highscore übermitteln", canvas.width / 2, btnY + btnHeight * 0.65);
+
+    // Leaderboard Button
+    const lbBtnWidth = btnWidth;
+    const lbBtnHeight = btnHeight;
+    const lbBtnX = btnX;
+    const lbBtnY = btnY + btnHeight + 12;
+
+    ctx.fillStyle = "#444";
+    roundRect(ctx, lbBtnX, lbBtnY, lbBtnWidth, lbBtnHeight, 15, true, false);
+    ctx.fillStyle = "white";
+    ctx.fillText("Leaderboard", canvas.width / 2, lbBtnY + lbBtnHeight * 0.65);
+
+    // Nochmal spielen Button
+    const playAgainBtnY = lbBtnY + lbBtnHeight + 12;
+    ctx.fillStyle = currentGameOverButtonColor = "#B22222";
+    roundRect(ctx, btnX, playAgainBtnY, btnWidth, btnHeight, 15, true, false);
+    ctx.fillStyle = "white";
+    ctx.font = `bold ${Math.max(18, canvas.width * 0.025)}px sans-serif`;
+    ctx.fillText("Nochmal spielen", canvas.width / 2, playAgainBtnY + btnHeight * 0.65);
   }
 
   // Schriftzug unten rechts (nur einmal gezeichnet)
@@ -1088,42 +1144,216 @@ function drawGameOverScreen() {
   }
 }
 
-function startGame() {
-  // --- Startsound ---
-  startSound.currentTime = 0;
-  startSound.play();
-  // --- Hintergrundmusik ---
-  bgMusic.currentTime = 0;
-  bgMusic.play();
-  gameRunning = true;
-  gameState = 'playing';
-  obstacles = [];
-  enemies = [];
-  frame = 0;
-  
-  adjustGameConstants(); // Sicherstellen, dass die Werte aktuell sind
+// --- PATCH: Canvas Click Handler für neue Buttons ---
+function handleCanvasClick(e) {
+  const rect = canvas.getBoundingClientRect();
+  const clickX = e.clientX - rect.left;
+  const clickY = e.clientY - rect.top;
 
-  speed = INITIAL_SPEED;
-  meters = 0;
-  
-  player.x = canvas.width * 0.08;
-  player.y = currentLandHeight + (canvas.height - 2 * currentLandHeight) / 2 - player.height / 2;
-  player.width = canvas.width * 0.10;
-  player.height = canvas.width * 0.10;
+  if (gameState === 'start') {
+    const btnWidth = Math.min(canvas.width * 0.4, 250);
+    const btnHeight = Math.min(canvas.height * 0.1, 70);
+    const btnX = (canvas.width - btnWidth) / 2;
+    const btnY = canvas.height * 0.35 - btnHeight / 2;
 
-  velocityY = 0;
-  waterScrollX1 = 0;
-  waterScrollX2 = 0;
+    if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= btnY && clickY <= btnY + btnHeight) {
+      currentStartButtonColor = "#8B0000";
+      drawStartScreen();
+      startSound.currentTime = 0;
+      startSound.play();
+      setTimeout(() => {
+        currentStartButtonColor = "#B22222";
+        startGame();
+      }, 100);
+    }
+  } else if (gameState === 'gameOver') {
+    // Werte wie in drawGameOverScreen berechnen:
+    const gameOverFontSize = Math.max(28, canvas.width * 0.032);
+    const infoFontSize = Math.max(20, canvas.width * 0.028);
+    const padding = infoFontSize * 0.7;
+    const lineHeight = infoFontSize * 1.3;
+    const distText = `Du bist ${Math.floor(meters)} Meter geschwommen.`;
+    const hsText = `Highscore: ${highScore} m`;
+    const boxWidth = Math.max(ctx.measureText(distText).width, ctx.measureText(hsText).width) + padding * 2;
+    const boxHeight = lineHeight + padding;
+    const boxY = canvas.height * 0.24 + gameOverFontSize * 0.7;
 
-  lastFrameTime = performance.now(); // Initialisiere lastFrameTime beim Spielstart
+    const btnWidth = Math.min(canvas.width * 0.5, 250);
+    const btnHeight = Math.min(canvas.height * 0.10, 55);
+    const btnX = (canvas.width - btnWidth) / 2;
+    const btnY = boxY + boxHeight + infoFontSize * 0.8;
 
-  // Zähler für Delta-Time-Logik zurücksetzen
-  timeSinceLastObstacle = 0;
-  currentObstacleDelay = INITIAL_OBSTACLE_DELAY;
-  timeSinceLastSpeedIncrease = 0;
+    // Highscore übermitteln Button
+    if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= btnY && clickY <= btnY + btnHeight) {
+      showHighscoreInput = true;
+      drawHighscoreInput();
+      return;
+    }
 
+    // Leaderboard Button
+    const lbBtnY = btnY + btnHeight + 12;
+    if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= lbBtnY && clickY <= lbBtnY + btnHeight) {
+      showLeaderboard = true;
+      fetchLeaderboard();
+      drawLeaderboard();
+      return;
+    }
 
-  requestAnimationFrame(gameLoop);
+    // Nochmal spielen Button
+    const playAgainBtnY = lbBtnY + btnHeight + 12;
+    if (clickX >= btnX && clickX <= btnX + btnWidth && clickY >= playAgainBtnY && clickY <= playAgainBtnY + btnHeight) {
+      currentGameOverButtonColor = "#8B0000";
+      drawGameOverScreen();
+      startSound.currentTime = 0;
+      startSound.play();
+      setTimeout(() => {
+        currentGameOverButtonColor = "#B22222";
+        startGame();
+      }, 100);
+    }
+  }
+}
+
+// --- NEU: Highscore-Name-Eingabe Overlay (schwarz-transparent) ---
+function drawHighscoreInput() {
+  let overlay = document.getElementById('highscoreOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'highscoreOverlay';
+    overlay.style.position = 'fixed';
+    overlay.style.left = 0;
+    overlay.style.top = 0;
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = 'rgba(0,0,0,0.6)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = 1000;
+    overlay.innerHTML = `
+      <div style="background:rgba(0,0,0,0.75);padding:32px 24px;border-radius:16px;box-shadow:0 2px 16px #0008;max-width:90vw;">
+        <h2 style="margin-top:0;color:#fff;">Highscore übermitteln</h2>
+        <input id="playerNameInput" type="text" maxlength="20" placeholder="Dein Name" style="font-size:1.2em;padding:8px;width:90%;margin-bottom:12px;border-radius:8px;border:none;">
+        <br>
+        <button id="submitScoreBtn" style="font-size:1.1em;padding:8px 24px;margin-top:8px;">Senden</button>
+        <button id="cancelScoreBtn" style="font-size:1.1em;padding:8px 24px;margin-left:12px;margin-top:8px;">Abbrechen</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById('submitScoreBtn').onclick = () => {
+      const name = document.getElementById('playerNameInput').value.trim();
+      if (name.length === 0) return;
+      submitHighscore(name);
+      document.body.removeChild(overlay);
+      showHighscoreInput = false;
+      drawGameOverScreen();
+    };
+    document.getElementById('cancelScoreBtn').onclick = () => {
+      document.body.removeChild(overlay);
+      showHighscoreInput = false;
+      drawGameOverScreen();
+    };
+  }
+}
+
+// --- NEU: Leaderboard Overlay (schwarz-transparent) ---
+function drawLeaderboard() {
+  let overlay = document.getElementById('leaderboardOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'leaderboardOverlay';
+    overlay.style.position = 'fixed';
+    overlay.style.left = 0;
+    overlay.style.top = 0;
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = 'rgba(0,0,0,0.7)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = 1001;
+    overlay.innerHTML = `
+      <div style="background:rgba(0,0,0,0.85);padding:24px 8px 16px 8px;border-radius:18px;max-width:95vw;max-height:90vh;overflow:auto;box-shadow:0 2px 16px #0008;">
+        <h2 style="margin-top:0;text-align:center;color:#fff;">Leaderboard (Top 100)</h2>
+        <div id="leaderboardList" style="max-height:60vh;overflow-y:auto;margin-bottom:16px;"></div>
+        <button id="closeLeaderboardBtn" style="font-size:1.1em;padding:8px 24px;display:block;margin:0 auto;margin-top:8px;">Zurück</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById('closeLeaderboardBtn').onclick = () => {
+      document.body.removeChild(overlay);
+      showLeaderboard = false;
+      drawGameOverScreen();
+    };
+  }
+  // Fülle die Liste
+  const listDiv = document.getElementById('leaderboardList');
+  if (leaderboardData.length === 0) {
+    listDiv.innerHTML = "<div style='text-align:center;color:#fff;'>Lade...</div>";
+  } else {
+    listDiv.innerHTML = leaderboardData.map((entry, i) =>
+      `<div style="display:flex;justify-content:space-between;padding:4px 12px;border-bottom:1px solid #333;color:#fff;">
+        <span style="font-weight:bold;width:2em;">${i+1}.</span>
+        <span style="flex:1;">${entry.name || 'Anonym'}</span>
+        <span style="width:4em;text-align:right;">${entry.score} m</span>
+      </div>`
+    ).join('');
+  }
+}
+
+// --- NEU: Highscore mit Name übermitteln ---
+function submitHighscore(name) {
+  const formData = new FormData();
+  formData.append('score', Math.floor(meters));
+  formData.append('device', deviceId);
+  formData.append('date', new Date().toISOString());
+  formData.append('name', name);
+
+  let overlay = document.getElementById('highscoreOverlay');
+  let feedbackDiv = document.getElementById('highscoreFeedback');
+  if (!feedbackDiv && overlay) {
+    feedbackDiv = document.createElement('div');
+    feedbackDiv.id = 'highscoreFeedback';
+    feedbackDiv.style.color = '#fff';
+    feedbackDiv.style.marginTop = '12px';
+    feedbackDiv.style.textAlign = 'center';
+    overlay.querySelector('div').appendChild(feedbackDiv);
+  }
+  if (feedbackDiv) feedbackDiv.textContent = "Sende...";
+
+  fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    body: formData
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error("Serverfehler");
+      if (feedbackDiv) feedbackDiv.textContent = "Highscore erfolgreich übermittelt!";
+      setTimeout(() => {
+        if (overlay) document.body.removeChild(overlay);
+        showHighscoreInput = false;
+        drawGameOverScreen();
+      }, 2000);
+    })
+    .catch((err) => {
+      if (feedbackDiv) feedbackDiv.textContent = "Übermittlung fehlgeschlagen. Bitte später erneut versuchen!";
+    });
+}
+
+// --- NEU: Leaderboard laden ---
+function fetchLeaderboard() {
+  leaderboardData = [];
+  fetch(GOOGLE_SCRIPT_URL + "?leaderboard=1")
+    .then(r => r.json())
+    .then(data => {
+      leaderboardData = data.slice(0, 100); // Top 100
+      drawLeaderboard();
+    })
+    .catch(() => {
+      leaderboardData = [];
+      drawLeaderboard();
+    });
 }
 
 // --- Eingabe-Handler ---
@@ -1251,8 +1481,9 @@ function saveRun() {
   const formData = new FormData();
   formData.append('score', Math.floor(meters));
   formData.append('device', deviceId);
+  formData.append('date', new Date().toISOString()); // <-- Datum mitsenden
 
-  fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
+  fetch(GOOGLE_SCRIPT_URL, {
     method: 'POST',
     body: formData
   }).then(() => {

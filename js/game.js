@@ -267,11 +267,10 @@ function saveHighScore() {
     highScore = Math.floor(meters);
     localStorage.setItem(HIGHSCORE_KEY, highScore);
 
-    // Highscore an Google Sheet senden
-    fetch('https://script.google.com/macros/s/AKfycbwm1eF6Ez7lbtmleuhI2iWwwhCvVGT69akHO1WeVhMab4jVBCexFGuaQvKJmPa5PhTF6A/exec', {
+    // Highscore an Google Sheet senden (ohne Namensabfrage)
+    fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
       method: 'POST',
       body: JSON.stringify({
-        name: prompt("Name für Highscore?") || "Unbekannt",
         score: highScore,
         device: deviceId
       }),

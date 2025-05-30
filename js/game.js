@@ -1247,7 +1247,6 @@ function drawHighscoreInput() {
       const name = document.getElementById('playerNameInput').value.trim();
       if (name.length === 0) return;
       submitHighscore(name);
-      document.body.removeChild(overlay);
       showHighscoreInput = false;
       drawGameOverScreen();
     };
@@ -1308,7 +1307,7 @@ function drawLeaderboard() {
 // --- NEU: Highscore mit Name übermitteln ---
 function submitHighscore(name) {
   const formData = new FormData();
-  formData.append('score', Math.floor(meters));
+  formData.append('score', highScore);
   formData.append('device', deviceId);
   formData.append('date', new Date().toISOString());
   formData.append('name', name);
@@ -1340,7 +1339,9 @@ function submitHighscore(name) {
 
       if (feedbackDiv) feedbackDiv.textContent = msg;
       setTimeout(() => {
-        if (overlay) document.body.removeChild(overlay);
+        if (overlay && document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
         showHighscoreInput = false;
         drawGameOverScreen();
       }, 2000);

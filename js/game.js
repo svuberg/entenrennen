@@ -699,10 +699,13 @@ function drawMeters() {
 
 
 // --- Spielbildschirme und Logik ---
+let gameOverTriggered = false; // <-- ganz oben im Code deklarieren
+
 function gameOver() {
+  if (gameOverTriggered) return; // <-- Schutz gegen Mehrfachaufruf
+  gameOverTriggered = true;      // <-- Flag setzen
   if (!gameRunning) return;
-  saveRun(); // <-- Jeder Lauf wird gespeichert!
-  gameRunning = false;
+  saveRun();
   // --- Kollisionssound ---
   getHitSound.currentTime = 0;
   getHitSound.play();
@@ -732,6 +735,8 @@ function gameOver() {
   }, 5000);
 
   requestAnimationFrame(gameLoop);
+
+  setTimeout(() => { gameOverTriggered = false; }, 1000); // Flag nach 1 Sekunde zurücksetzen
 }
 
 let frame = 0; // frame bleibt für Dinge wie Ente Animation
@@ -1385,7 +1390,7 @@ function drawHighscoreInput() {
     overlay.innerHTML = `
       <div style="background:rgba(0,0,0,0.75);padding:32px 24px;border-radius:16px;box-shadow:0 2px 16px #0008;max-width:90vw;">
         <h2 style="margin-top:0;color:#fff;">Highscore übermitteln</h2>
-        <input id="playerNameInput" type="text" maxlength="20" placeholder="Dein Name" style="font-size:1.2em;padding:8px;width:90%;margin-bottom:12px;border-radius:8px;border:none;">
+        <input id="playerNameInput" type="text" maxlength="40" placeholder="Dein Name" style="font-size:1.2em;padding:8px;width:90%;margin-bottom:12px;border-radius:8px;border:none;">
         <br>
         <button id="submitScoreBtn" style="font-size:1.1em;padding:8px 24px;margin-top:8px;">Senden</button>
         <button id="cancelScoreBtn" style="font-size:1.1em;padding:8px 24px;margin-left:12px;margin-top:8px;">Abbrechen</button>

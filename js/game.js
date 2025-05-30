@@ -272,7 +272,7 @@ function saveHighScore() {
     formData.append('score', highScore);
     formData.append('device', deviceId);
 
-    fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
+    fetch('https://script.google.com/macros/s/AKfycbwqiyTMn8v9HFIpaRUa2P5Ao8DcLJkO2B0keEaADXkxKi6_UkSHclsc4VGrv_iQIenAhw/exec', {
       method: 'POST',
       body: formData
     }).then(() => {
@@ -300,6 +300,12 @@ const WATER_ANIM_INTERVAL = 3.5; // Sekunden pro Frame
 // NEU: Event-Hinweis Variablen
 let showEventHint = false;
 let eventHintTimeout = null;
+
+// Neue State-Variablen
+let showNameInput = false;
+let playerName = "";
+let highscoreList = [];
+let showHighscoreList = false;
 
 // --- Zeichnungsfunktionen ---
 // KORRIGIERT: drawBackground nimmt jetzt deltaTime entgegen
@@ -1002,7 +1008,6 @@ function drawStartScreen() {
 // Game Over Bildschirm
 function drawGameOverScreen() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   drawBackgroundImageCover(startGameOverBackgroundImg, ctx, canvas);
 
   // Game Over Überschrift
@@ -1076,55 +1081,183 @@ function drawGameOverScreen() {
     ctx.fillText("Nochmal spielen", canvas.width / 2, btnY + btnHeight * 0.65);
   }
 
-  // Schriftzug unten rechts (nur einmal gezeichnet)
-  if (schriftzugImg.complete && schriftzugImg.naturalWidth !== 0) {
-    const schriftzugMaxWidth = canvas.width * 0.25;
-    const schriftzugWidth = Math.min(schriftzugMaxWidth, 250);
-    const schriftzugHeight = schriftzugImg.height * (schriftzugWidth / schriftzugImg.width);
-    const schriftzugX = canvas.width - schriftzugWidth - (canvas.width * 0.015);
-    const schriftzugY = canvas.height - schriftzugHeight - (canvas.height * 0.015);
+  // --- Highscore übertragen Button ---
+  if (!showEventHint && !showNameInput && !showHighscoreList) {
+    const btnWidth = Math.min(canvas.width * 0.5, 250);
+    const btnHeight = Math.min(canvas.height * 0.12, 60);
+    const btnX = (canvas.width - btnWidth) / 2;
+    const btnY = canvas.height * 0.65;
 
-    ctx.drawImage(schriftzugImg, schriftzugX, schriftzugY, schriftzugWidth, schriftzugHeight);
+    ctx.fillStyle = "#1E90FF";
+    roundRect(ctx, btnX, btnY, btnWidth, btnHeight, 15, true, false);
+    ctx.fillStyle = "white";
+    ctx.font = `bold ${Math.max(18, canvas.width * 0.025)}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("Highscore übertragen", canvas.width / 2, btnY + btnHeight * 0.65);
+
+    // --- Highscore Liste Button ---
+    const listBtnY = btnY + btnHeight + 15;
+    ctx.fillStyle = "#228B22";
+    roundRect(ctx, btnX, listBtnY, btnWidth, btnHeight, 15, true, false);
+    ctx.fillStyle = "white";
+    ctx.fillText("Highscore Liste", canvas.width / 2, listBtnY + btnHeight * 0.65);
+  }
+
+  // --- Namenseingabe anzeigen ---
+  if (showNameInput) {
+    // HTML-Input über dem Canvas einblenden
+    showNameInputBox();
+  } else {
+    hideNameInputBox();
+  }
+
+  // --- Highscore Liste anzeigen ---
+  if (showHighscoreList) {
+    drawHighscoreList();
   }
 }
 
-function startGame() {
-  // --- Startsound ---
-  startSound.currentTime = 0;
-  startSound.play();
-  // --- Hintergrundmusik ---
-  bgMusic.currentTime = 0;
-  bgMusic.play();
-  gameRunning = true;
-  gameState = 'playing';
-  obstacles = [];
-  enemies = [];
-  frame = 0;
-  
-  adjustGameConstants(); // Sicherstellen, dass die Werte aktuell sind
+// Hilfsfunktionen für Namenseingabe
+function showNameInputBox() {
+  let input = document.getElementById("nameInputBox");
+  let sendBtn = document.getElementById("sendHighscoreBtn");
+  if (!input) {
+    input = document.createElement("input");
+    input.id = "nameInputBox";
+    input.type = "text";
+    input.placeholder = "Dein Name";
+    input.style.position = "absolute";
+    input.style.left = "50%";
+    input.style.top = "60%";
+    input.style.transform = "translate(-50%, 0)";
+    input.style.fontSize = "1.2em";
+    document.body.appendChild(input);
+  }
+  input.style.display = "block";
+  input.value = playerName;
 
-  speed = INITIAL_SPEED;
-  meters = 0;
-  
-  player.x = canvas.width * 0.08;
-  player.y = currentLandHeight + (canvas.height - 2 * currentLandHeight) / 2 - player.height / 2;
-  player.width = canvas.width * 0.10;
-  player.height = canvas.width * 0.10;
-
-  velocityY = 0;
-  waterScrollX1 = 0;
-  waterScrollX2 = 0;
-
-  lastFrameTime = performance.now(); // Initialisiere lastFrameTime beim Spielstart
-
-  // Zähler für Delta-Time-Logik zurücksetzen
-  timeSinceLastObstacle = 0;
-  currentObstacleDelay = INITIAL_OBSTACLE_DELAY;
-  timeSinceLastSpeedIncrease = 0;
-
-
-  requestAnimationFrame(gameLoop);
+  if (!sendBtn) {
+    sendBtn = document.createElement("button");
+    sendBtn.id = "sendHighscoreBtn";
+    sendBtn.innerText = "Senden";
+    sendBtn.style.position = "absolute";
+    sendBtn.style.left = "50%";
+    sendBtn.style.top = "65%";
+    sendBtn.style.transform = "translate(-50%, 0)";
+    sendBtn.style.fontSize = "1.1em";
+    document.body.appendChild(sendBtn);
+    sendBtn.onclick = sendHighscoreWithName;
+  }
+  sendBtn.style.display = "block";
 }
+
+function hideNameInputBox() {
+  let input = document.getElementById("nameInputBox");
+  let sendBtn = document.getElementById("sendHighscoreBtn");
+  if (input) input.style.display = "none";
+  if (sendBtn) sendBtn.style.display = "none";
+}
+
+function sendHighscoreWithName() {
+  let input = document.getElementById("nameInputBox");
+  const name = input.value.trim();
+  if (!name) return;
+  const formData = new FormData();
+  formData.append('score', Math.floor(meters));
+  formData.append('device', deviceId);
+  formData.append('name', name);
+
+  fetch('https://script.google.com/macros/s/AKfycbwqiyTMn8v9HFIpaRUa2P5Ao8DcLJkO2B0keEaADXkxKi6_UkSHclsc4VGrv_iQIenAhw/exec', {
+    method: 'POST',
+    body: formData
+  }).then(() => {
+    showNameInput = false;
+    playerName = "";
+    hideNameInputBox();
+    alert("Highscore übertragen!");
+    drawGameOverScreen();
+  });
+}
+
+// Highscore Liste anzeigen
+function drawHighscoreList() {
+  // HTML-Element für Liste erzeugen
+  let listDiv = document.getElementById("highscoreListDiv");
+  if (!listDiv) {
+    listDiv = document.createElement("div");
+    listDiv.id = "highscoreListDiv";
+    listDiv.style.position = "absolute";
+    listDiv.style.left = "50%";
+    listDiv.style.top = "70%";
+    listDiv.style.transform = "translate(-50%, 0)";
+    listDiv.style.background = "rgba(0,0,0,0.8)";
+    listDiv.style.color = "#fff";
+    listDiv.style.padding = "16px";
+    listDiv.style.borderRadius = "12px";
+    listDiv.style.maxHeight = "300px";
+    listDiv.style.overflowY = "auto";
+    listDiv.style.fontSize = "1.1em";
+    document.body.appendChild(listDiv);
+  }
+  listDiv.style.display = "block";
+  listDiv.innerHTML = "<b>Highscore Liste</b><br><br>" +
+    highscoreList.map((entry, i) =>
+      `${i + 1}. ${entry.name}: ${entry.score} m`
+    ).join("<br>");
+}
+
+function hideHighscoreList() {
+  let listDiv = document.getElementById("highscoreListDiv");
+  if (listDiv) listDiv.style.display = "none";
+}
+
+// Event-Handler für Canvas-Buttons
+canvas.addEventListener('click', function(e) {
+  if (gameState === 'gameOver' && !showEventHint) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const btnWidth = Math.min(canvas.width * 0.5, 250);
+    const btnHeight = Math.min(canvas.height * 0.12, 60);
+    const btnX = (canvas.width - btnWidth) / 2;
+    const btnY = canvas.height * 0.65;
+    const listBtnY = btnY + btnHeight + 15;
+
+    // Highscore übertragen Button
+    if (!showNameInput && !showHighscoreList &&
+      clickX >= btnX && clickX <= btnX + btnWidth &&
+      clickY >= btnY && clickY <= btnY + btnHeight) {
+      showNameInput = true;
+      drawGameOverScreen();
+      return;
+    }
+    // Highscore Liste Button
+    if (!showNameInput && !showHighscoreList &&
+      clickX >= btnX && clickX <= btnX + btnWidth &&
+      clickY >= listBtnY && clickY <= listBtnY + btnHeight) {
+      showHighscoreList = true;
+      // Highscore Liste Button (nur ein https://!)
+      fetch('https://script.google.com/macros/s/AKfycbwqiyTMn8v9HFIpaRUa2P5Ao8DcLJkO2B0keEaADXkxKi6_UkSHclsc4VGrv_iQIenAhw/exec')
+        .then(r => r.json())
+        .then(list => {
+          highscoreList = list;
+          drawGameOverScreen();
+        });
+      return;
+    }
+    // Klick außerhalb: Liste/Namenseingabe schließen
+    if (showHighscoreList) {
+      showHighscoreList = false;
+      hideHighscoreList();
+      drawGameOverScreen();
+    }
+    if (showNameInput) {
+      showNameInput = false;
+      hideNameInputBox();
+      drawGameOverScreen();
+    }
+  }
+});
 
 // --- Eingabe-Handler ---
 window.addEventListener("keydown", (e) => {
@@ -1252,7 +1385,7 @@ function saveRun() {
   formData.append('score', Math.floor(meters));
   formData.append('device', deviceId);
 
-  fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
+  fetch('https://script.google.com/macros/s/AKfycbwqiyTMn8v9HFIpaRUa2P5Ao8DcLJkO2B0keEaADXkxKi6_UkSHclsc4VGrv_iQIenAhw/exec', {
     method: 'POST',
     body: formData
   }).then(() => {
@@ -1260,4 +1393,25 @@ function saveRun() {
   }).catch((err) => {
     console.error("Fehler beim Senden an Google Sheet:", err);
   });
+}
+
+function startGame() {
+  gameRunning = true;
+  gameState = 'playing';
+  meters = 0;
+  speed = INITIAL_SPEED;
+  velocityY = 0;
+  obstacles = [];
+  enemies = [];
+  player.frameIndex = 0;
+  player.frameTick = 0;
+  player.x = canvas.width * 0.08;
+  player.y = currentLandHeight + (canvas.height - 2 * currentLandHeight) / 2 - player.height / 2;
+  lastFrameTime = performance.now();
+  timeSinceLastObstacle = 0;
+  timeSinceLastSpeedIncrease = 0;
+  bgMusic.currentTime = 0;
+  bgMusic.play();
+  drawGameOverScreen(); // oder drawStartScreen(), je nach gewünschtem Verhalten
+  requestAnimationFrame(gameLoop);
 }

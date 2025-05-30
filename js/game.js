@@ -266,6 +266,22 @@ function saveHighScore() {
   if (meters > highScore) {
     highScore = Math.floor(meters);
     localStorage.setItem(HIGHSCORE_KEY, highScore);
+
+    // Highscore an Google Sheet senden
+    fetch('https://script.google.com/macros/s/AKfycbwm1eF6Ez7lbtmleuhI2iWwwhCvVGT69akHO1WeVhMab4jVBCexFGuaQvKJmPa5PhTF6A/exec', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: prompt("Name für Highscore?") || "Unbekannt",
+        score: highScore,
+        device: deviceId
+      }),
+      headers: { 'Content-Type': 'application/json' }
+    }).then(() => {
+      console.log("Highscore an Google Sheet gesendet!");
+    }).catch((err) => {
+      console.error("Fehler beim Senden an Google Sheet:", err);
+    });
+
     console.log("Neuer Highscore gespeichert: " + highScore);
   }
 }
@@ -1219,3 +1235,14 @@ loadingLoop();
 window.addEventListener('beforeunload', () => {
   saveHighScore();
 });
+
+// --- Geräte-ID generieren und speichern ---
+function getOrCreateDeviceId() {
+  let deviceId = localStorage.getItem('entenrennen_device_id');
+  if (!deviceId) {
+    deviceId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 16));
+    localStorage.setItem('entenrennen_device_id', deviceId);
+  }
+  return deviceId;
+}
+const deviceId = getOrCreateDeviceId();

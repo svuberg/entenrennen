@@ -532,11 +532,28 @@ function drawObstacles(deltaTime) {
       height: player.height * 0.8
     };
 
+    let obsHitbox = {
+      x: obs.x,
+      y: obs.y,
+      width: obs.width,
+      height: obs.height
+    };
+
+    // Hitbox für LOG (Baumstamm) anpassen:
+    if (obs.img === obstacleImages[3]) { // log
+      obsHitbox = {
+        x: obs.x + obs.width * 0.15,
+        y: obs.y + obs.height * 0.25,
+        width: obs.width * 0.7,
+        height: obs.height * 0.5
+      };
+    }
+
     if (
-      duckHitbox.x < obs.x + obs.width &&
-      duckHitbox.x + duckHitbox.width > obs.x &&
-      duckHitbox.y < obs.y + obs.height &&
-      duckHitbox.y + duckHitbox.height > obs.y
+      duckHitbox.x < obsHitbox.x + obsHitbox.width &&
+      duckHitbox.x + duckHitbox.width > obsHitbox.x &&
+      duckHitbox.y < obsHitbox.y + obsHitbox.height &&
+      duckHitbox.y + duckHitbox.height > obsHitbox.y
     ) {
       gameOver();
       return;

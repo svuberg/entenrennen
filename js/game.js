@@ -267,14 +267,14 @@ function saveHighScore() {
     highScore = Math.floor(meters);
     localStorage.setItem(HIGHSCORE_KEY, highScore);
 
-    // Highscore an Google Sheet senden (ohne Namensabfrage)
+    // Highscore an Google Sheet senden (FormData, kein Header!)
+    const formData = new FormData();
+    formData.append('score', highScore);
+    formData.append('device', deviceId);
+
     fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
       method: 'POST',
-      body: JSON.stringify({
-        score: highScore,
-        device: deviceId
-      }),
-      headers: { 'Content-Type': 'application/json' }
+      body: formData
     }).then(() => {
       console.log("Highscore an Google Sheet gesendet!");
     }).catch((err) => {

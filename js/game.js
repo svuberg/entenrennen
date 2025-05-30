@@ -1214,3 +1214,8 @@ function loadingLoop() {
 
 gameState = 'loading';
 loadingLoop();
+
+// Highscore auch beim Verlassen der Seite speichern (z.B. bei App-Schließen oder Neuladen)
+window.addEventListener('beforeunload', () => {
+  saveHighScore();
+});

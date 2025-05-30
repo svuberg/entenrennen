@@ -279,7 +279,7 @@ loadHighScore(); // Lade den Highscore direkt beim Laden des Skripts
 
 
 // --- Google Apps Script URL als Variable ---
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxI9VmMSKypB-QDfyCvfdwA7lJ22YEOIMsaf6VmcFmBIOq1NOGZh8z5waXwCEYYO2w7WQ/exec";
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzwX735C-bcWYWLBY2KjYgji9SoYUQ3CTB3YHCVXBzMSAvgrEY4urFdG2iI3kjGERB9CA/exec";
 
 function saveHighScore() {
   if (meters > highScore) {
@@ -1350,7 +1350,8 @@ function saveRun() {
   const formData = new FormData();
   formData.append('score', Math.floor(meters));
   formData.append('device', deviceId);
-  formData.append('date', new Date().toISOString()); // <-- Datum mitsenden
+  formData.append('date', new Date().toISOString());
+  formData.append('type', 'run'); // <--- NEU
 
   fetch(GOOGLE_SCRIPT_URL, {
     method: 'POST',
@@ -1457,44 +1458,9 @@ function submitHighscore(name) {
   formData.append('device', deviceId);
   formData.append('date', new Date().toISOString());
   formData.append('name', name);
+  formData.append('type', 'highscore'); // <--- NEU
 
-  let overlay = document.getElementById('highscoreOverlay');
-  let feedbackDiv = document.getElementById('highscoreFeedback');
-  if (!feedbackDiv && overlay) {
-    feedbackDiv = document.createElement('div');
-    feedbackDiv.id = 'highscoreFeedback';
-    feedbackDiv.style.color = '#fff';
-    feedbackDiv.style.marginTop = '12px';
-    feedbackDiv.style.textAlign = 'center';
-    overlay.querySelector('div').appendChild(feedbackDiv);
-  }
-  if (feedbackDiv) feedbackDiv.textContent = "Sende...";
-
-  fetch(GOOGLE_SCRIPT_URL, {
-    method: 'POST',
-    body: formData
-  })
-    .then((response) => response.text())
-    .then((text) => {
-      let msg = "";
-      if (text === "OK") msg = "Dein Score wurde übermittelt!";
-      else if (text === "UPDATED") msg = "Dein Eintrag wurde aktualisiert!";
-      else if (text === "DUPLICATE") msg = "Dieser Score wurde bereits übermittelt.";
-      else if (text === "BADWORD") msg = "Bitte gib einen angemessenen Namen ein!";
-      else msg = "Unbekannte Antwort vom Server.";
-
-      if (feedbackDiv) feedbackDiv.textContent = msg;
-      setTimeout(() => {
-        if (overlay && document.body.contains(overlay)) {
-          document.body.removeChild(overlay);
-        }
-        showHighscoreInput = false;
-        drawGameOverScreen();
-      }, 2000);
-    })
-    .catch((err) => {
-      if (feedbackDiv) feedbackDiv.textContent = "Übermittlung fehlgeschlagen. Bitte später erneut versuchen!";
-    });
+  // ...rest wie gehabt...
 }
 
 // --- NEU: Leaderboard laden ---

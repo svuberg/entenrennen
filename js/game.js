@@ -3,6 +3,7 @@ const PIXELS_PER_METER = 100; // 100 Pixel = 1 Meter
 // --- Spielzustand Variablen (GANZ NACH OBEN VERSCHOBEN) ---
 let gameRunning = false;
 let gameState = 'loading'; // Zustände: 'loading', 'start', 'playing', 'gameOver'
+let frame = 0; // Frame-Zähler für Animationen
 
 // Bewegungs- und Physikvariablen
 let velocityY = 0;
@@ -16,8 +17,6 @@ let currentGameOverButtonColor = "#228B22"; // Grün
 
 function startGame() {
   removeBugReportButton(); // <-- Button immer entfernen, wenn Spiel startet
-  gameRunning = true;
-  gameState = 'playing';
   gameRunning = true;
   gameState = 'playing';
   meters = 0;
@@ -712,6 +711,7 @@ function gameOver() {
   // --- Musik pausieren ---
   bgMusic.pause();
   saveHighScore();
+  // Animation und State-Wechsel
   gameState = 'collisionAnim';
   collisionAnimActive = true;
   collisionAnimTime = 0;
@@ -735,12 +735,9 @@ function gameOver() {
   }, 5000);
 
   requestAnimationFrame(gameLoop);
-
-  setTimeout(() => { gameOverTriggered = false; }, 1000); // Flag nach 1 Sekunde zurücksetzen
 }
 
-let frame = 0; // frame bleibt für Dinge wie Ente Animation
-
+// Im gameLoop: Wenn die Animation vorbei ist, Flag zurücksetzen!
 function gameLoop(currentTime) {
   if (gameState === 'collisionAnim') {
     // Delta Time Berechnung
@@ -776,6 +773,7 @@ function gameLoop(currentTime) {
     if (collisionAnimTime >= COLLISION_ANIM_DURATION) {
       collisionAnimActive = false;
       gameState = 'gameOver';
+      gameOverTriggered = false; // <-- Flag HIER zurücksetzen!
       drawGameOverScreen();
       return;
     }

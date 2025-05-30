@@ -267,11 +267,12 @@ function saveHighScore() {
     highScore = Math.floor(meters);
     localStorage.setItem(HIGHSCORE_KEY, highScore);
 
+    // Highscore an Google Sheet senden (FormData, kein Header!)
     const formData = new FormData();
     formData.append('score', highScore);
     formData.append('device', deviceId);
 
-    fetch('https://script.google.com/macros/s/AKfycbyR3lfh686T8cFHwIHXNuQeVTGZKCmSf5vVVvBxzIEteFVaVxmGDozwUFhq-g1E19SG-Q/exec', {
+    fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
       method: 'POST',
       body: formData
     }).then(() => {
@@ -284,49 +285,251 @@ function saveHighScore() {
   }
 }
 
-function saveRun() {
-  const formData = new FormData();
-  formData.append('score', Math.floor(meters));
-  formData.append('device', deviceId);
+let waterScrollX1 = 0;
+let waterScrollX2 = 0;
+let obstacles = [];
+let enemies = [];
+let speed = INITIAL_SPEED; // Initialwert wird in startGame gesetzt
+let meters = 0;
 
-  fetch('https://script.google.com/macros/s/AKfycbyR3lfh686T8cFHwIHXNuQeVTGZKCmSf5vVVvBxzIEteFVaVxmGDozwUFhq-g1E19SG-Q/exec', {
-    method: 'POST',
-    body: formData
-  }).then(() => {
-    console.log("Run an Google Sheet gesendet!");
-  }).catch((err) => {
-    console.error("Fehler beim Senden an Google Sheet:", err);
-  });
+// NEU: Wasser-Animation Variablen
+let waterAnimFrame = 0;
+let waterAnimTimer = 0;
+const WATER_ANIM_INTERVAL = 3.5; // Sekunden pro Frame
+
+// NEU: Event-Hinweis Variablen
+let showEventHint = false;
+let eventHintTimeout = null;
+
+// --- Zeichnungsfunktionen ---
+// KORRIGIERT: drawBackground nimmt jetzt deltaTime entgegen
+function drawBackground(deltaTime) {
+  // --- 1. Wasser zuerst zeichnen ---
+  const waterAreaHeight = canvas.height - (currentLandHeight * 2);
+  const waterTileBaseWidth = waterTopImg.naturalWidth;
+  const waterTileBaseHeight = waterTopImg.naturalHeight;
+  const targetTileWidth = canvas.width * 0.15;
+  let scaledWaterTileWidth = waterTileBaseWidth * (targetTileWidth / waterTileBaseWidth);
+  let scaledWaterTileHeight = waterTileBaseHeight * (targetTileWidth / waterTileBaseWidth);
+
+  if (!waterTopImg.complete || waterTopImg.naturalWidth === 0 || waterTopImg.naturalHeight === 0) {
+      scaledWaterTileWidth = canvas.width / 5;
+      scaledWaterTileHeight = waterAreaHeight / 2;
+  }
+  if (scaledWaterTileWidth === 0) scaledWaterTileWidth = 1;
+
+  // Animation-Timer erhöhen (für sanfte Bewegung)
+  waterAnimTimer += deltaTime;
+  if (waterAnimTimer >= WATER_ANIM_INTERVAL) {
+    waterAnimTimer = 0;
+  }
+  const waveOffset = Math.sin((waterAnimTimer / WATER_ANIM_INTERVAL) * Math.PI * 2) * (scaledWaterTileHeight * 0.08);
+
+  // Wasser-Animation
+  if (waterTopImg.complete && waterTopImg.naturalWidth !== 0) {
+    const startY = currentLandHeight;
+    const endY = canvas.height - currentLandHeight;
+    for (let y = startY; y < endY; y += scaledWaterTileHeight) {
+      for (let x = waterScrollX2; x < canvas.width + scaledWaterTileWidth; x += scaledWaterTileWidth) {
+        // Hauptwelle
+        ctx.globalAlpha = 0.85;
+        ctx.drawImage(waterAnimImg, x, y + waveOffset, scaledWaterTileWidth, scaledWaterTileHeight);
+        // Nebenwelle
+        ctx.globalAlpha = 0.35;
+        ctx.drawImage(waterAnimImg, x, y - waveOffset, scaledWaterTileWidth, scaledWaterTileHeight);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // --- 2. Ufer/Wiese oben und unten zuletzt zeichnen ---
+  if (grassImg.complete && grassImg.naturalWidth !== 0) {
+    // Nur den mittleren Bereich des Bildes verwenden (z.B. 60% in der Mitte)
+    const midStart = Math.floor(grassImg.naturalWidth * 0.20);
+    const midWidth = Math.floor(grassImg.naturalWidth * 0.60);
+    const targetHeight = currentLandHeight;
+    const scaleY = targetHeight / grassImg.naturalHeight;
+
+    // OBERER RAND (um 180° gedreht, ganz oben)
+    ctx.save();
+    ctx.translate(0, targetHeight);
+    ctx.scale(1, -1);
+    let x = 0;
+    while (x < canvas.width) {
+      // +1 Pixel Überlappung gegen Spalten
+      let w = Math.min((midWidth * scaleY) + 1, canvas.width - x);
+      ctx.drawImage(
+        grassImg,
+        midStart, 0, midWidth, grassImg.naturalHeight,
+        x, 0,
+        w, targetHeight
+      );
+      x += (midWidth * scaleY);
+    }
+    ctx.restore();
+
+    // UNTERER RAND (ganz unten)
+    x = 0;
+    while (x < canvas.width) {
+      // +1 Pixel Überlappung gegen Spalten
+      let w = Math.min((midWidth * scaleY) + 1, canvas.width - x);
+      ctx.drawImage(
+        grassImg,
+        midStart, 0, midWidth, grassImg.naturalHeight,
+        x, canvas.height - targetHeight,
+        w, targetHeight
+      );
+      x += (midWidth * scaleY);
+    }
+  }
 }
 
-function sendHighscoreWithName() {
-  let input = document.getElementById("nameInputBox");
-  const name = input.value.trim();
-  if (!name) return;
-  const formData = new FormData();
-  formData.append('score', Math.floor(meters));
-  formData.append('device', deviceId);
-  formData.append('name', name);
+function spawnObstacle() {
+  // Zufällig eines der vier Hindernisse wählen
+  const idx = Math.floor(Math.random() * obstacleImages.length);
+  const img = obstacleImages[idx];
 
-  fetch('https://script.google.com/macros/s/AKfycbyR3lfh686T8cFHwIHXNuQeVTGZKCmSf5vVVvBxzIEteFVaVxmGDozwUFhq-g1E19SG-Q/exec', {
-    method: 'POST',
-    body: formData
-  }).then(() => {
-    showNameInput = false;
-    playerName = "";
-    hideNameInputBox();
-    alert("Highscore übertragen!");
-    drawGameOverScreen();
+  // Größe je nach Hindernis anpassen
+  let obstacleSize;
+  switch (idx) {
+    case 0: // großer Felsen
+      obstacleSize = Math.max(canvas.width * 0.12, 60);
+      break;
+    case 1: // kleiner Felsen
+      obstacleSize = Math.max(canvas.width * 0.08, 40);
+      break;
+    case 2: // Ast
+      obstacleSize = Math.max(canvas.width * 0.13, 50);
+      break;
+    case 3: // Baumstamm
+      obstacleSize = Math.max(canvas.width * 0.16, 80);
+      break;
+    default:
+      obstacleSize = Math.max(canvas.width * 0.10, 50);
+  }
+
+  // Ast ist flach, Baumstamm jetzt höher!
+  let obsHeight = obstacleSize;
+  if (idx === 2) {
+    obsHeight = obstacleSize * 0.5;
+  } else if (idx === 3) {
+    obsHeight = obstacleSize * 1.0; // <-- Baumstamm jetzt volle Höhe!
+  }
+
+  const obsY = currentLandHeight + Math.random() * (canvas.height - currentLandHeight * 2 - obsHeight);
+
+  obstacles.push({
+    x: canvas.width,
+    y: obsY,
+    width: obstacleSize,
+    height: obsHeight,
+    img: img,
+    // Nur branches (idx === 2) rotieren und wippen, logs (idx === 3) nur wippen
+    rotation: (idx === 2) ? (Math.random() * Math.PI * 2) : 0,
+    rotationSpeed: (idx === 2) ? ((Math.random() - 0.5) * 0.3) : 0,
+    wavePhase: (idx === 2 || idx === 3) ? (Math.random() * Math.PI * 2) : 0
   });
+
+  if (idx === 0 && Math.random() < 0.5) { // 50% Chance für Frosch auf big_rock
+    enemies.push({
+      x: canvas.width + obstacleSize * 0.2,
+      y: obsY - obstacleSize * 0.4,
+      width: obstacleSize * 0.6,
+      height: obstacleSize * 0.6,
+      state: 'idle', // idle, jump, rest
+      frame: 0,
+      jumpTimer: 0,
+      attachedObstacle: obstacles[obstacles.length], // Referenz auf den Felsen
+      hasJumped: false
+    });
+  }
 }
 
-// Highscore Liste laden
-fetch('https://script.google.com/macros/s/AKfycbyR3lfh686T8cFHwIHXNuQeVTGZKCmSf5vVVvBxzIEteFVaVxmGDozwUFhq-g1E19SG-Q/exec')
-  .then(r => r.json())
-  .then(list => {
-    highscoreList = list;
-    drawGameOverScreen();
-  });
+// KORRIGIERT: drawObstacles nimmt jetzt deltaTime entgegen
+function drawObstacles(deltaTime) {
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    const obs = obstacles[i];
+    obs.x -= speed * deltaTime;
+
+    // Wippen/Rotation vorbereiten
+    let yOffset = 0;
+    if (obs.img === obstacleImages[2]) { // branch: wippen & rotieren
+      obs.rotation += obs.rotationSpeed * deltaTime;
+      obs.wavePhase += deltaTime * 1.2;
+      yOffset = Math.sin(obs.wavePhase) * obs.height * 0.08;
+    } else if (obs.img === obstacleImages[3]) { // log: nur wippen, stärker
+      obs.wavePhase += deltaTime * 1.2;
+      yOffset = Math.sin(obs.wavePhase) * obs.height * 0.18;
+    }
+
+    // --- Wasserreflexion ---
+    ctx.save();
+    ctx.globalAlpha = 0.22; // Etwas sichtbarer
+    if (
+      obs.img === obstacleImages[0] || // rock_big
+      obs.img === obstacleImages[1] || // rock_small
+      obs.img === obstacleImages[3]    // log
+    ) {
+      // Spiegelung weiter nach unten und größer
+      const reflectionHeight = obs.height * 0.9; // statt 0.7
+      const reflectionYOffset = obs.height * 0.18; // weiter nach unten
+      ctx.translate(obs.x + obs.width / 2, obs.y + yOffset + obs.height + reflectionYOffset);
+      ctx.scale(1, -1);
+      ctx.drawImage(
+        obs.img,
+        -obs.width / 2,
+        0,
+        obs.width,
+        reflectionHeight
+      );
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    // Hindernis selbst zeichnen
+    if (obs.img.complete && obs.img.naturalWidth !== 0) {
+      if (obs.img === obstacleImages[2]) { // branch: wippen & rotieren
+        ctx.save();
+        ctx.translate(obs.x + obs.width / 2, obs.y + yOffset + obs.height / 2);
+        ctx.rotate(obs.rotation);
+        ctx.drawImage(
+          obs.img,
+          -obs.width / 2,
+          -obs.height / 2,
+          obs.width,
+          obs.height
+        );
+        ctx.restore();
+      } else if (obs.img === obstacleImages[3]) { // log: nur wippen
+        ctx.drawImage(obs.img, obs.x, obs.y + yOffset, obs.width, obs.height);
+      } else { // rocks: normal
+        ctx.drawImage(obs.img, obs.x, obs.y, obs.width, obs.height);
+      }
+    }
+
+    const duckHitbox = {
+      x: player.x + player.width * 0.1,
+      y: player.y + player.height * 0.1,
+      width: player.width * 0.8,
+      height: player.height * 0.8
+    };
+
+    if (
+      duckHitbox.x < obs.x + obs.width &&
+      duckHitbox.x + duckHitbox.width > obs.x &&
+      duckHitbox.y < obs.y + obs.height &&
+      duckHitbox.y + duckHitbox.height > obs.y
+    ) {
+      gameOver();
+      return;
+    }
+
+    if (obs.x + obs.width < 0) {
+      obstacles.splice(i, 1);
+    }
+  }
+}
+
 
 // --- Sounds laden ---
 const frogSound = new Audio('assets/sounds/frog.mp3');
@@ -799,6 +1002,7 @@ function drawStartScreen() {
 // Game Over Bildschirm
 function drawGameOverScreen() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
   drawBackgroundImageCover(startGameOverBackgroundImg, ctx, canvas);
 
   // Game Over Überschrift
@@ -872,183 +1076,55 @@ function drawGameOverScreen() {
     ctx.fillText("Nochmal spielen", canvas.width / 2, btnY + btnHeight * 0.65);
   }
 
-  // --- Highscore übertragen Button ---
-  if (!showEventHint && !showNameInput && !showHighscoreList) {
-    const btnWidth = Math.min(canvas.width * 0.5, 250);
-    const btnHeight = Math.min(canvas.height * 0.12, 60);
-    const btnX = (canvas.width - btnWidth) / 2;
-    const btnY = canvas.height * 0.65;
+  // Schriftzug unten rechts (nur einmal gezeichnet)
+  if (schriftzugImg.complete && schriftzugImg.naturalWidth !== 0) {
+    const schriftzugMaxWidth = canvas.width * 0.25;
+    const schriftzugWidth = Math.min(schriftzugMaxWidth, 250);
+    const schriftzugHeight = schriftzugImg.height * (schriftzugWidth / schriftzugImg.width);
+    const schriftzugX = canvas.width - schriftzugWidth - (canvas.width * 0.015);
+    const schriftzugY = canvas.height - schriftzugHeight - (canvas.height * 0.015);
 
-    ctx.fillStyle = "#1E90FF";
-    roundRect(ctx, btnX, btnY, btnWidth, btnHeight, 15, true, false);
-    ctx.fillStyle = "white";
-    ctx.font = `bold ${Math.max(18, canvas.width * 0.025)}px sans-serif`;
-    ctx.textAlign = "center";
-    ctx.fillText("Highscore übertragen", canvas.width / 2, btnY + btnHeight * 0.65);
-
-    // --- Highscore Liste Button ---
-    const listBtnY = btnY + btnHeight + 15;
-    ctx.fillStyle = "#228B22";
-    roundRect(ctx, btnX, listBtnY, btnWidth, btnHeight, 15, true, false);
-    ctx.fillStyle = "white";
-    ctx.fillText("Highscore Liste", canvas.width / 2, listBtnY + btnHeight * 0.65);
-  }
-
-  // --- Namenseingabe anzeigen ---
-  if (showNameInput) {
-    // HTML-Input über dem Canvas einblenden
-    showNameInputBox();
-  } else {
-    hideNameInputBox();
-  }
-
-  // --- Highscore Liste anzeigen ---
-  if (showHighscoreList) {
-    drawHighscoreList();
+    ctx.drawImage(schriftzugImg, schriftzugX, schriftzugY, schriftzugWidth, schriftzugHeight);
   }
 }
 
-// Hilfsfunktionen für Namenseingabe
-function showNameInputBox() {
-  let input = document.getElementById("nameInputBox");
-  let sendBtn = document.getElementById("sendHighscoreBtn");
-  if (!input) {
-    input = document.createElement("input");
-    input.id = "nameInputBox";
-    input.type = "text";
-    input.placeholder = "Dein Name";
-    input.style.position = "absolute";
-    input.style.left = "50%";
-    input.style.top = "60%";
-    input.style.transform = "translate(-50%, 0)";
-    input.style.fontSize = "1.2em";
-    document.body.appendChild(input);
-  }
-  input.style.display = "block";
-  input.value = playerName;
+function startGame() {
+  // --- Startsound ---
+  startSound.currentTime = 0;
+  startSound.play();
+  // --- Hintergrundmusik ---
+  bgMusic.currentTime = 0;
+  bgMusic.play();
+  gameRunning = true;
+  gameState = 'playing';
+  obstacles = [];
+  enemies = [];
+  frame = 0;
+  
+  adjustGameConstants(); // Sicherstellen, dass die Werte aktuell sind
 
-  if (!sendBtn) {
-    sendBtn = document.createElement("button");
-    sendBtn.id = "sendHighscoreBtn";
-    sendBtn.innerText = "Senden";
-    sendBtn.style.position = "absolute";
-    sendBtn.style.left = "50%";
-    sendBtn.style.top = "65%";
-    sendBtn.style.transform = "translate(-50%, 0)";
-    sendBtn.style.fontSize = "1.1em";
-    document.body.appendChild(sendBtn);
-    sendBtn.onclick = sendHighscoreWithName;
-  }
-  sendBtn.style.display = "block";
+  speed = INITIAL_SPEED;
+  meters = 0;
+  
+  player.x = canvas.width * 0.08;
+  player.y = currentLandHeight + (canvas.height - 2 * currentLandHeight) / 2 - player.height / 2;
+  player.width = canvas.width * 0.10;
+  player.height = canvas.width * 0.10;
+
+  velocityY = 0;
+  waterScrollX1 = 0;
+  waterScrollX2 = 0;
+
+  lastFrameTime = performance.now(); // Initialisiere lastFrameTime beim Spielstart
+
+  // Zähler für Delta-Time-Logik zurücksetzen
+  timeSinceLastObstacle = 0;
+  currentObstacleDelay = INITIAL_OBSTACLE_DELAY;
+  timeSinceLastSpeedIncrease = 0;
+
+
+  requestAnimationFrame(gameLoop);
 }
-
-function hideNameInputBox() {
-  let input = document.getElementById("nameInputBox");
-  let sendBtn = document.getElementById("sendHighscoreBtn");
-  if (input) input.style.display = "none";
-  if (sendBtn) sendBtn.style.display = "none";
-}
-
-function sendHighscoreWithName() {
-  let input = document.getElementById("nameInputBox");
-  const name = input.value.trim();
-  if (!name) return;
-  const formData = new FormData();
-  formData.append('score', Math.floor(meters));
-  formData.append('device', deviceId);
-  formData.append('name', name);
-
-  fetch('https://script.google.com/macros/s/AKfycbyR3lfh686T8cFHwIHXNuQeVTGZKCmSf5vVVvBxzIEteFVaVxmGDozwUFhq-g1E19SG-Q/exec', {
-    method: 'POST',
-    body: formData
-  }).then(() => {
-    showNameInput = false;
-    playerName = "";
-    hideNameInputBox();
-    alert("Highscore übertragen!");
-    drawGameOverScreen();
-  });
-}
-
-// Highscore Liste anzeigen
-function drawHighscoreList() {
-  // HTML-Element für Liste erzeugen
-  let listDiv = document.getElementById("highscoreListDiv");
-  if (!listDiv) {
-    listDiv = document.createElement("div");
-    listDiv.id = "highscoreListDiv";
-    listDiv.style.position = "absolute";
-    listDiv.style.left = "50%";
-    listDiv.style.top = "70%";
-    listDiv.style.transform = "translate(-50%, 0)";
-    listDiv.style.background = "rgba(0,0,0,0.8)";
-    listDiv.style.color = "#fff";
-    listDiv.style.padding = "16px";
-    listDiv.style.borderRadius = "12px";
-    listDiv.style.maxHeight = "300px";
-    listDiv.style.overflowY = "auto";
-    listDiv.style.fontSize = "1.1em";
-    document.body.appendChild(listDiv);
-  }
-  listDiv.style.display = "block";
-  listDiv.innerHTML = "<b>Highscore Liste</b><br><br>" +
-    highscoreList.map((entry, i) =>
-      `${i + 1}. ${entry.name}: ${entry.score} m`
-    ).join("<br>");
-}
-
-function hideHighscoreList() {
-  let listDiv = document.getElementById("highscoreListDiv");
-  if (listDiv) listDiv.style.display = "none";
-}
-
-// Event-Handler für Canvas-Buttons
-canvas.addEventListener('click', function(e) {
-  if (gameState === 'gameOver' && !showEventHint) {
-    const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
-    const btnWidth = Math.min(canvas.width * 0.5, 250);
-    const btnHeight = Math.min(canvas.height * 0.12, 60);
-    const btnX = (canvas.width - btnWidth) / 2;
-    const btnY = canvas.height * 0.65;
-    const listBtnY = btnY + btnHeight + 15;
-
-    // Highscore übertragen Button
-    if (!showNameInput && !showHighscoreList &&
-      clickX >= btnX && clickX <= btnX + btnWidth &&
-      clickY >= btnY && clickY <= btnY + btnHeight) {
-      showNameInput = true;
-      drawGameOverScreen();
-      return;
-    }
-    // Highscore Liste Button
-    if (!showNameInput && !showHighscoreList &&
-      clickX >= btnX && clickX <= btnX + btnWidth &&
-      clickY >= listBtnY && clickY <= listBtnY + btnHeight) {
-      showHighscoreList = true;
-      // Highscore Liste Button (nur ein https://!)
-      fetch('https://script.google.com/macros/s/AKfycbyR3lfh686T8cFHwIHXNuQeVTGZKCmSf5vVVvBxzIEteFVaVxmGDozwUFhq-g1E19SG-Q/exec')
-        .then(r => r.json())
-        .then(list => {
-          highscoreList = list;
-          drawGameOverScreen();
-        });
-      return;
-    }
-    // Klick außerhalb: Liste/Namenseingabe schließen
-    if (showHighscoreList) {
-      showHighscoreList = false;
-      hideHighscoreList();
-      drawGameOverScreen();
-    }
-    if (showNameInput) {
-      showNameInput = false;
-      hideNameInputBox();
-      drawGameOverScreen();
-    }
-  }
-});
 
 // --- Eingabe-Handler ---
 window.addEventListener("keydown", (e) => {
@@ -1176,7 +1252,7 @@ function saveRun() {
   formData.append('score', Math.floor(meters));
   formData.append('device', deviceId);
 
-  fetch('https://script.google.com/macros/s/AKfycbyR3lfh686T8cFHwIHXNuQeVTGZKCmSf5vVVvBxzIEteFVaVxmGDozwUFhq-g1E19SG-Q/exec', {
+  fetch('https://script.google.com/macros/s/AKfycbxj15-YVehIqXXSN6qb4Uqxqo6tCfTJPLK7c-Y_m4jNGKDvRhGASeB0BWW4ZvRTueggeA/exec', {
     method: 'POST',
     body: formData
   }).then(() => {
@@ -1184,25 +1260,4 @@ function saveRun() {
   }).catch((err) => {
     console.error("Fehler beim Senden an Google Sheet:", err);
   });
-}
-
-function startGame() {
-  gameRunning = true;
-  gameState = 'playing';
-  meters = 0;
-  speed = INITIAL_SPEED;
-  velocityY = 0;
-  obstacles = [];
-  enemies = [];
-  player.frameIndex = 0;
-  player.frameTick = 0;
-  player.x = canvas.width * 0.08;
-  player.y = currentLandHeight + (canvas.height - 2 * currentLandHeight) / 2 - player.height / 2;
-  lastFrameTime = performance.now();
-  timeSinceLastObstacle = 0;
-  timeSinceLastSpeedIncrease = 0;
-  bgMusic.currentTime = 0;
-  bgMusic.play();
-  drawGameOverScreen(); // oder drawStartScreen(), je nach gewünschtem Verhalten
-  requestAnimationFrame(gameLoop);
 }

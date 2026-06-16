@@ -4,9 +4,9 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1780267365|134439481';
+const CACHE_VERSION = '1781559693|1302281129';
 /** @type {string} */
-const CACHE_PREFIX = 'DuckRace-sw-cache-';
+const CACHE_PREFIX = 'Entenrennen-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 /** @type {string} */
 const OFFLINE_URL = 'index.offline.html';
@@ -21,6 +21,11 @@ const CACHEABLE_FILES = ["index.wasm","index.pck"];
 const FULL_CACHE = CACHED_FILES.concat(CACHEABLE_FILES);
 
 self.addEventListener('install', (event) => {
+	// skipWaiting() activates the new service worker immediately instead of
+	// waiting for all existing tabs to close. Combined with clients.claim()
+	// in the activate handler this means users get the new version on the
+	// very next page load after a deploy.
+	self.skipWaiting();
 	event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CACHED_FILES)));
 });
 
@@ -33,6 +38,10 @@ self.addEventListener('activate', (event) => {
 	).then(function () {
 		// Enable navigation preload if available.
 		return ('navigationPreload' in self.registration) ? self.registration.navigationPreload.enable() : Promise.resolve();
+	}).then(function () {
+		// Claim all open clients immediately so the new version takes effect
+		// without requiring a manual reload.
+		return self.clients.claim();
 	}));
 });
 
